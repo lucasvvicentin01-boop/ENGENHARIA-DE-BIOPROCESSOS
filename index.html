@@ -1,0 +1,1752 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>BioTwin AC-60 · Simulador Digital Twin de Planta de Ácido Clavulânico</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <!-- ========================================================================
+       CABEÇALHO GLOBAL · NAVEGAÇÃO 3 ABAS · BARRA TEMPORAL SINCRONIZADA
+       ======================================================================== -->
+  <header class="app-header">
+    <div class="header-row-top">
+      <div class="brand">
+        <div class="brand-mark">AC</div>
+        <div class="brand-title">
+          <h1>BIOTWIN AC-60 · PLANTA DE ÁCIDO CLAVULÂNICO</h1>
+          <p>Digital Twin Industrial · <em>Streptomyces clavuligerus</em> · STR 60 m³ · PFD-AC-001 Rev. 1</p>
+        </div>
+      </div>
+
+      <!-- 3 Abas Principais solicitadas -->
+      <nav class="main-tabs" aria-label="Abas do Simulador">
+        <button type="button" class="tab-btn active" data-tab="plant">
+          <span class="tab-num">01</span> Planta Industrial (PFD)
+        </button>
+        <button type="button" class="tab-btn" data-tab="reactor">
+          <span class="tab-num">02</span> Biorreator R-301 (60 m³)
+        </button>
+        <button type="button" class="tab-btn" data-tab="cell">
+          <span class="tab-num">03</span> Célula, DNA &amp; Gargalos
+        </button>
+      </nav>
+
+      <div class="header-actions">
+        <select id="global-preset-select" class="bio-select" title="Carregar cenário identificado com origem e escopo">
+          <option value="fen22_grupo" selected>Cenário: FEN22 Grupo · 105,7 rpm (Seção 7 · 41,92 m³)</option>
+          <option value="preliminar_ref">Cenário: Modelo Preliminar Fed-Batch · ~577 mg/L @ 99h (~20 kg)</option>
+          <option value="ribeiro_rec">Cenário: Ribeiro RIB21 · 105,7 rpm (Calibração Bancada)</option>
+          <option value="fen22_industrial">Cenário: FEN22 Industrial · 125 rpm + Cepa Ind.</option>
+          <option value="high_rpm_180">Cenário: Novo Acionamento · 180 rpm (Ribeiro)</option>
+        </select>
+        <button type="button" id="btn-export-csv" class="bio-btn bio-btn-primary" title="Exportar série temporal real para Blender / Python">
+          ⬇ Exportar CSV
+        </button>
+      </div>
+    </div>
+
+    <!-- Barra de Reprodução Sincronizada (Controla as 3 abas ao mesmo tempo!) -->
+    <div class="transport-bar">
+      <button type="button" id="btn-play-toggle" class="bio-btn transport-play is-playing">❚❚ Pausar</button>
+      <button type="button" id="btn-restart-sim" class="bio-btn" title="Reiniciar simulação em t = 0 h">↺ Reiniciar</button>
+      <button type="button" id="btn-jump-peak" class="bio-btn bio-btn-amber" title="Saltar diretamente para o instante de pico produtivo">
+        ★ Ir ao Pico
+      </button>
+      <select id="playback-speed" class="bio-select" title="Velocidade da simulação">
+        <option value="1">1× (1 h/s)</option>
+        <option value="4" selected>4× (4 h/s)</option>
+        <option value="12">12× (12 h/s)</option>
+      </select>
+      <div class="time-scrubber-wrap">
+        <span class="time-readout" id="time-readout">96.0 h / 170 h</span>
+        <input type="range" id="time-scrubber" class="bio-slider" min="0" max="170" step="0.5" value="96" />
+      </div>
+      <span class="phase-pill" id="global-phase-pill">Pico de Produção AC</span>
+    </div>
+  </header>
+
+  <main class="app-main">
+    <!-- ======================================================================
+         ABA 1: PLANTA INDUSTRIAL COMPLETA (VISUALIZAÇÃO 3D POR CAMADAS · PFD)
+         ====================================================================== -->
+    <section id="tab-plant" class="tab-panel active">
+      <div class="plant-workspace">
+        <!-- 1. MENU LATERAL ESQUERDO PARA NAVEGAÇÃO -->
+        <nav class="plant-nav" aria-label="Navegação principal CLAVIS">
+          <div class="plant-nav-brand">
+            <span class="plant-nav-mark" aria-hidden="true">
+              <svg viewBox="0 0 36 36" width="28" height="28" fill="none" stroke="currentColor" stroke-width="1.8">
+                <circle cx="18" cy="18" r="4.2" fill="rgba(20,241,217,0.25)" />
+                <circle cx="18" cy="5" r="2.4" fill="currentColor" />
+                <circle cx="18" cy="31" r="2.4" fill="currentColor" />
+                <circle cx="6.5" cy="11.5" r="2.4" fill="currentColor" />
+                <circle cx="29.5" cy="24.5" r="2.4" fill="currentColor" />
+                <circle cx="29.5" cy="11.5" r="2.4" fill="currentColor" />
+                <circle cx="6.5" cy="24.5" r="2.4" fill="currentColor" />
+                <line x1="18" y1="7.5" x2="18" y2="13.8" />
+                <line x1="18" y1="22.2" x2="18" y2="28.5" />
+                <line x1="8.7" y1="12.7" x2="14.3" y2="15.9" />
+                <line x1="21.7" y1="20.1" x2="27.3" y2="23.3" />
+                <line x1="27.3" y1="12.7" x2="21.7" y2="15.9" />
+                <line x1="14.3" y1="20.1" x2="8.7" y2="23.3" />
+              </svg>
+            </span>
+            <div>
+              <strong>CLAVIS</strong>
+              <small>DIGITAL TWIN</small>
+            </div>
+          </div>
+
+          <button type="button" class="plant-nav-item active" data-tab="plant" data-nav-action="plant">
+            <span class="nav-ico">🏭</span> Planta Industrial
+          </button>
+          <button type="button" class="plant-nav-item" data-tab="reactor">
+            <span class="nav-ico">🧪</span> Biorreator STR
+          </button>
+          <button type="button" class="plant-nav-item" data-tab="cell">
+            <span class="nav-ico">🧬</span> Célula / Metabolismo
+          </button>
+
+          <div class="plant-nav-divider"></div>
+
+          <button type="button" class="plant-nav-item" data-plant-nav="simulation">
+            <span class="nav-ico">⚙</span> Simulação
+          </button>
+          <button type="button" class="plant-nav-item" data-plant-nav="operation">
+            <span class="nav-ico">👷</span> Operação
+          </button>
+          <button type="button" class="plant-nav-item" data-plant-nav="results">
+            <span class="nav-ico">📈</span> Resultados
+          </button>
+          <button type="button" class="plant-nav-item" data-plant-nav="alarms">
+            <span class="nav-ico">🔔</span> Alarmes
+            <b class="plant-nav-badge" id="plant-nav-alarm-badge">2</b>
+          </button>
+          <button type="button" class="plant-nav-item" data-plant-nav="reports">
+            <span class="nav-ico">📄</span> Relatórios
+          </button>
+          <button type="button" class="plant-nav-item" data-plant-nav="settings">
+            <span class="nav-ico">🎛</span> Configurações
+          </button>
+
+          <div class="plant-nav-foot">
+            <div><span class="status-dot"></span> Modelo 3D Sincronizado</div>
+            <small id="plant-nav-clock">t = 96,0 h · STR 60 m³</small>
+          </div>
+        </nav>
+
+        <!-- 2. COLUNA CENTRAL PREDOMINANTE: BARRA SUPERIOR + PLANTA 3D + SEQUÊNCIA + LEGENDA -->
+        <div class="plant-main-column">
+          <!-- Barra superior com identificação da instalação e status -->
+          <div class="plant-titlebar">
+            <div class="plant-title-texts">
+              <h2>Planta Industrial – Produção de Ácido Clavulânico</h2>
+              <p>Fermentação de <em>Streptomyces clavuligerus</em> - Rota convencional (PFD)</p>
+            </div>
+            <div class="plant-title-right">
+              <div class="plant-area-quickbar" aria-label="Filtro rápido por área industrial">
+                <button type="button" class="area-pill active" data-area-pill="all">Todas as Áreas</button>
+                <button type="button" class="area-pill" data-area-pill="100">Área 100</button>
+                <button type="button" class="area-pill" data-area-pill="200">Área 200</button>
+                <button type="button" class="area-pill" data-area-pill="300">Área 300</button>
+                <button type="button" class="area-pill" data-area-pill="400">Área 400</button>
+                <button type="button" class="area-pill" data-area-pill="500">Área 500</button>
+              </div>
+              <div class="plant-live-pill" id="plant-live-pill">
+                <i class="status-dot"></i>
+                <span id="plant-run-status">EM OPERAÇÃO (SIMULAÇÃO)</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Palco Principal 3D (Elemento Visual Predominante) -->
+          <div class="panel-card plant-stage-card">
+            <div class="plant-canvas-wrap" id="plant-canvas-wrap">
+              <canvas id="plant-canvas"></canvas>
+
+              <!-- Camada de Rótulos 3D Projetados (TAGs Industriais, Áreas 100-500 e Instrumentação ISA) -->
+              <div id="plant-3d-labels" class="plant-3d-labels" aria-label="Identificações 3D na cena"></div>
+
+              <!-- Barra superior direita de modos de câmera na cena 3D -->
+              <div class="plant-viewmodes-bar" aria-label="Modos de visualização e câmera">
+                <button type="button" class="camera-btn active" data-camera-mode="iso" title="Vista isométrica geral">◇ <span>Isométrica</span></button>
+                <button type="button" class="camera-btn" data-camera-mode="top" title="Vista superior">▤ <span>Superior</span></button>
+                <button type="button" class="camera-btn" data-camera-mode="front" title="Vista frontal">▱ <span>Frontal</span></button>
+                <button type="button" class="camera-btn" data-camera-mode="side" title="Vista lateral">▯ <span>Lateral</span></button>
+                <i></i>
+                <button type="button" class="camera-btn" data-camera-action="focus-eq" title="Aproximação por equipamento selecionado">⊙ <span>Equipamento</span></button>
+                <button type="button" class="camera-btn" data-camera-action="focus-area" title="Aproximação por área selecionada">⊞ <span>Área</span></button>
+                <button type="button" class="camera-btn" data-camera-action="overview" title="Visão geral automática">⛶ <span>Visão Geral</span></button>
+                <i></i>
+                <button type="button" class="camera-btn" data-plant-mode="scaleup" title="Comparativo de Scale-up (5,1 L → 50 L → 60 m³)">📊 <span>Scale-up</span></button>
+              </div>
+
+              <!-- Badge informativo no topo esquerdo da cena -->
+              <div class="plant-layer-badge">
+                <span id="badge-active-view">VISTA ISOMÉTRICA 3D</span>
+                <b>·</b>
+                <span>20 EQUIPAMENTOS</span>
+                <b>·</b>
+                <span>5 ÁREAS (100–500)</span>
+                <b>·</b>
+                <span id="badge-active-layers">8/8 CAMADAS ATIVAS</span>
+              </div>
+
+              <!-- Dock flutuante inferior esquerdo (idêntico ao layout de referência) -->
+              <div class="plant-camera-dock" aria-label="Controles rápidos de câmera e camadas">
+                <button type="button" class="dock-ico-btn active" data-camera-mode="iso" title="Vista Isométrica 3D Geral">
+                  <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 3L4 7.5v9L12 21l8-4.5v-9L12 3z"/><path d="M12 12l8-4.5"/><path d="M12 12v9"/><path d="M12 12L4 7.5"/></svg>
+                </button>
+                <button type="button" class="dock-ico-btn" data-camera-action="focus" title="Aproximar do Equipamento Selecionado">
+                  <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="7"/><circle cx="12" cy="12" r="2.5"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/></svg>
+                </button>
+                <button type="button" class="dock-ico-btn" data-camera-action="zoom-in" title="Aproximar Zoom (+)">
+                  <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.35-4.35M11 8v6M8 11h6"/></svg>
+                </button>
+                <button type="button" class="dock-ico-btn" data-camera-action="zoom-out" title="Afastar Zoom (-)">
+                  <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.35-4.35M8 11h6"/></svg>
+                </button>
+                <button type="button" class="dock-ico-btn" data-camera-action="toggle-layers-focus" title="Destacar Painel de Camadas 3D">
+                  <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8"><polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 12 12 17 22 12"/><polyline points="2 17 12 22 22 17"/></svg>
+                </button>
+                <button type="button" class="dock-ico-btn" data-camera-action="overview" title="Visão Geral Automática da Planta">
+                  <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>
+                </button>
+              </div>
+
+              <div class="stage-hint">Arraste para rotacionar · Roda para zoom · Botão direito para mover · Clique em equipamento, TAG ou área.</div>
+
+              <!-- Overlay opcional de Scale-up -->
+              <div id="scaleup-overlay" class="scaleup-overlay">
+                <div class="panel-header">
+                  <div class="panel-title">Ampliação de Escala · 5,1 L → 50 L → 60 m³</div>
+                  <button type="button" class="bio-btn bio-btn-primary" data-plant-mode="iso3d">✕ Voltar à Planta 3D</button>
+                </div>
+                <div id="scaleup-cards" class="scaleup-cards"></div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Barra Inferior: Sequência das Operações Unitárias (conforme PFD) -->
+          <div class="panel-card plant-sequence-card">
+            <div class="plant-sec-title">Sequência de Processo <span>(conforme PFD)</span></div>
+            <div class="plant-sequence">
+              <div class="sequence-area" data-area-select="100" role="button" tabindex="0">
+                <div class="seq-area-head">
+                  <b>ÁREA 100</b>
+                  <small>Preparo de Meios</small>
+                </div>
+                <div class="seq-flow-row">
+                  <span class="seq-tag" data-equipment-select="V-101">V-101</span>
+                  <i class="seq-arr">→</i>
+                  <span class="seq-tag" data-equipment-select="V-102">V-102</span>
+                  <i class="seq-arr">→</i>
+                  <span class="seq-tag" data-equipment-select="P-101">P-101</span>
+                </div>
+              </div>
+
+              <div class="sequence-area" data-area-select="200" role="button" tabindex="0">
+                <div class="seq-area-head">
+                  <b>ÁREA 200</b>
+                  <small>Inóculo e Ar</small>
+                </div>
+                <div class="seq-flow-rows">
+                  <div class="seq-flow-row">
+                    <span class="seq-tag" data-equipment-select="R-201">R-201</span>
+                    <i class="seq-arr">→</i>
+                    <span class="seq-tag" data-equipment-select="K-201">K-201</span>
+                    <i class="seq-arr">→</i>
+                  </div>
+                  <div class="seq-flow-row">
+                    <span class="seq-tag" data-equipment-select="E-201">E-201</span>
+                    <i class="seq-arr">→</i>
+                    <span class="seq-tag" data-equipment-select="F-201">F-201</span>
+                  </div>
+                </div>
+              </div>
+
+              <div class="sequence-area" data-area-select="300" role="button" tabindex="0">
+                <div class="seq-area-head">
+                  <b>ÁREA 300</b>
+                  <small>Fermentação</small>
+                </div>
+                <div class="seq-flow-row">
+                  <span class="seq-tag selected" data-equipment-select="R-301">R-301</span>
+                </div>
+              </div>
+
+              <div class="sequence-area" data-area-select="400" role="button" tabindex="0">
+                <div class="seq-area-head">
+                  <b>ÁREA 400</b>
+                  <small>Colheita</small>
+                </div>
+                <div class="seq-flow-row">
+                  <span class="seq-tag" data-equipment-select="T-401">T-401</span>
+                  <i class="seq-arr">→</i>
+                  <span class="seq-tag" data-equipment-select="C-401">C-401</span>
+                </div>
+              </div>
+
+              <div class="sequence-area sequence-area-wide" data-area-select="500" role="button" tabindex="0">
+                <div class="seq-area-head">
+                  <b>ÁREA 500</b>
+                  <small>Extração e Purificação (Downstream)</small>
+                </div>
+                <div class="seq-flow-rows">
+                  <div class="seq-flow-row">
+                    <span class="seq-tag" data-equipment-select="T-501">T-501</span>
+                    <i class="seq-arr">→</i>
+                    <span class="seq-tag" data-equipment-select="EX-401">EX-401</span>
+                    <i class="seq-arr">→</i>
+                    <span class="seq-tag" data-equipment-select="D-501">D-501</span>
+                    <i class="seq-arr">→</i>
+                    <span class="seq-tag" data-equipment-select="EV-501">EV-501</span>
+                    <i class="seq-arr">→</i>
+                    <span class="seq-tag" data-equipment-select="E-501">E-501</span>
+                  </div>
+                  <div class="seq-flow-row">
+                    <i class="seq-arr">→</i>
+                    <span class="seq-tag" data-equipment-select="T-502">T-502</span>
+                    <i class="seq-arr">→</i>
+                    <span class="seq-tag" data-equipment-select="CR-501">CR-501</span>
+                    <i class="seq-arr">→</i>
+                    <span class="seq-tag" data-equipment-select="F-501">F-501</span>
+                    <i class="seq-arr">→</i>
+                    <span class="seq-tag" data-equipment-select="TK-501">TK-501</span>
+                    <i class="seq-arr">→</i>
+                    <span class="seq-tag" data-equipment-select="DR-501">DR-501</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Legenda Permanente de Correntes (PFD + Padrão de Cores da Diretriz) -->
+          <div class="panel-card plant-stream-legend-card" aria-label="Legenda permanente das correntes">
+            <div class="legend-header-row">
+              <div class="plant-sec-title">Legenda de Correntes <span>(PFD)</span></div>
+              <div class="legend-standard-pills">
+                <button type="button" class="std-stream-pill" data-stream-filter="aqueous" title="Filtrar/destacar correntes aquosas"><i style="--sc:#2589f5"></i>Azul: Corrente aquosa</button>
+                <button type="button" class="std-stream-pill" data-stream-filter="organic" title="Filtrar/destacar fase orgânica"><i style="--sc:#22c55e"></i>Verde: Fase orgânica</button>
+                <button type="button" class="std-stream-pill" data-stream-filter="solvent" title="Filtrar/destacar solvente recuperado e ar estéril"><i style="--sc:#06b6d4"></i>Ciano: Solvente recuperado</button>
+                <button type="button" class="std-stream-pill" data-stream-filter="product" title="Filtrar/destacar produto"><i style="--sc:#f59e0b"></i>Amarelo/âmbar: Produto</button>
+                <button type="button" class="std-stream-pill" data-stream-filter="waste" title="Filtrar/destacar resíduos e biomassa"><i style="--sc:#f97316"></i>Laranja: Resíduos e biomassa</button>
+              </div>
+            </div>
+            <div class="plant-stream-legend-grid">
+              <span data-stream-filter="aqueous"><i style="--stream:#2589f5"></i>Meios de fermentação (aquosa)</span>
+              <span data-stream-filter="organic"><i style="--stream:#22c55e"></i>Caldo fermentado / resfriado / clarificado</span>
+              <span data-stream-filter="organic"><i style="--stream:#14b8a6"></i>Fase orgânica rica em AC</span>
+              <span data-stream-filter="product"><i style="--stream:#eab308"></i>Suspensão de cristais</span>
+
+              <span data-stream-filter="aqueous"><i style="--stream:#38bdf8"></i>Meio de alimentação (glicerol)</span>
+              <span data-stream-filter="waste"><i style="--stream:#f97316"></i>Biomassa separada (resíduo)</span>
+              <span data-stream-filter="aqueous"><i style="--stream:#2589f5"></i>Fase aquosa / rafinado</span>
+              <span data-stream-filter="waste"><i style="--stream:#ea580c"></i>Licor-mãe (resíduo)</span>
+
+              <span data-stream-filter="aqueous"><i style="--stream:#60a5fa"></i>Inóculo (fase aquosa)</span>
+              <span data-stream-filter="aqueous"><i style="--stream:#3b82f6"></i>Caldo acidificado (pH 2,0)</span>
+              <span data-stream-filter="solvent"><i class="dashed" style="--stream:#06b6d4"></i>Acetato recuperado (reciclo)</span>
+              <span data-stream-filter="product"><i style="--stream:#fbbf24"></i>Clavulanato de potássio seco (produto)</span>
+
+              <span data-stream-filter="solvent"><i style="--stream:#22d3ee"></i>Ar comprimido / ar estéril</span>
+              <span data-stream-filter="organic"><i style="--stream:#16a34a"></i>Mistura com acetato de etila</span>
+              <span data-stream-filter="product"><i style="--stream:#f59e0b"></i>Agente de potássio / conversão K⁺</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- 3. PAINEL LATERAL DIREITO: SISTEMA DE 8 CAMADAS 3D + INSPEÇÃO DE EQUIPAMENTO E ÁREA -->
+        <aside class="plant-sidebar plant-inspector-column">
+          <!-- Painel de Controle de Camadas 3D (CAMADA 01 a CAMADA 08) -->
+          <div class="panel-card plant-layers-card" id="plant-layers-card">
+            <div class="panel-header">
+              <div class="panel-title">Sistema de Camadas 3D</div>
+              <div class="layer-Quick-actions">
+                <button type="button" class="mini-pill" id="btn-layers-all" title="Ativar todas as 8 camadas">Todas</button>
+                <span class="layer-count" id="layer-active-count">08/08</span>
+              </div>
+            </div>
+            <div class="plant-layer-list">
+              <label title="Visualização dos equipamentos industriais, com seus detalhes construtivos e identificação.">
+                <span><b class="layer-num">01</b><i class="layer-glyph equipment"></i>Equipamentos 3D</span>
+                <input type="checkbox" data-3d-layer="equipment" checked />
+              </label>
+              <label title="Visualização das linhas de processo, conexões, válvulas e derivações.">
+                <span><b class="layer-num">02</b><i class="layer-glyph pipes"></i>Tubulações</span>
+                <input type="checkbox" data-3d-layer="pipes" checked />
+              </label>
+              <label title="Representação dos diferentes fluidos, com cores específicas e animações direcionais.">
+                <span><b class="layer-num">03</b><i class="layer-glyph streams"></i>Correntes de Processo</span>
+                <input type="checkbox" data-3d-layer="streams" checked />
+              </label>
+              <label title="Identificação dos equipamentos e instrumentos diretamente na cena 3D.">
+                <span><b class="layer-num">04</b><i class="layer-glyph tags"></i>TAGs Industriais</span>
+                <input type="checkbox" data-3d-layer="tags" checked />
+              </label>
+              <label title="Visualização de sensores, transmissores, indicadores, válvulas de controle e medidores.">
+                <span><b class="layer-num">05</b><i class="layer-glyph instrumentation"></i>Instrumentação</span>
+                <input type="checkbox" data-3d-layer="instrumentation" checked />
+              </label>
+              <label title="Destaque visual dos equipamentos em operação, parados, em manutenção ou em alarme.">
+                <span><b class="layer-num">06</b><i class="layer-glyph status"></i>Status Operacional</span>
+                <input type="checkbox" data-3d-layer="status" checked />
+              </label>
+              <label title="Destaque das áreas 100, 200, 300, 400 e 500.">
+                <span><b class="layer-num">07</b><i class="layer-glyph areas"></i>Áreas Industriais</span>
+                <input type="checkbox" data-3d-layer="areas" checked />
+              </label>
+              <label title="Animação das correntes durante a execução da simulação.">
+                <span><b class="layer-num">08</b><i class="layer-glyph flow"></i>Fluxo de Processo</span>
+                <input type="checkbox" data-3d-layer="flow" checked />
+              </label>
+            </div>
+          </div>
+
+          <!-- Painel de Inspeção de Equipamento Selecionado -->
+          <div class="panel-card plant-inspector-card" id="plant-inspector-card">
+            <div class="panel-header">
+              <div class="panel-title">Inspeção de Equipamento</div>
+              <button type="button" class="mini-pill" id="btn-insp-zoom" title="Aproximar câmera deste equipamento">⊙ Focar 3D</button>
+            </div>
+            <div class="insp-header">
+              <span class="insp-tag-pill" id="insp-tag">R-301</span>
+              <span class="insp-area-label" id="insp-area">ÁREA 300 — FERMENTAÇÃO</span>
+            </div>
+            <h3 class="insp-name" id="insp-name">Fermentador STR 60 m³</h3>
+            <div id="insp-operating-state" class="insp-operating-state">
+              <i></i><span>EM OPERAÇÃO · SIMULAÇÃO ATIVA</span>
+            </div>
+
+            <div class="insp-section-label">Função &amp; Especificação</div>
+            <p class="insp-spec" id="insp-spec"></p>
+            <div class="insp-notes" id="insp-notes"></div>
+
+            <div class="insp-section-label">Conexões &amp; Correntes (Entrada / Saída)</div>
+            <div id="insp-connections" class="insp-connections"></div>
+
+            <div class="insp-section-label">Parâmetros Operacionais ao Vivo</div>
+            <div class="insp-metrics" id="insp-live-metrics"></div>
+
+            <div class="insp-section-label">Instrumentação Associada (Camada 05)</div>
+            <div id="insp-instruments" class="insp-instruments"></div>
+
+            <div class="insp-actions-row">
+              <button type="button" id="btn-open-reactor-from-plant" class="bio-btn bio-btn-primary" style="width:100%;justify-content:center">
+                🔬 Abrir Biorreator R-301 (Corte CFD)
+              </button>
+            </div>
+          </div>
+
+          <!-- Painel de Visualização por Área Industrial (Seção 5) -->
+          <div class="panel-card plant-area-inspector-card" id="plant-area-inspector-card">
+            <div class="panel-header">
+              <div class="panel-title" id="area-insp-title">Visualização por Área · Geral</div>
+              <button type="button" class="mini-pill" id="btn-clear-area-filter" style="display:none">Limpar</button>
+            </div>
+            <p class="area-insp-desc" id="area-insp-desc">Selecione uma Área (100 a 500) na planta ou na sequência para isolar seus equipamentos, correntes e indicadores.</p>
+            <div id="area-insp-sequence" class="area-insp-sequence"></div>
+            <div id="area-insp-streams" class="area-insp-streams"></div>
+            <div id="area-insp-kpis" class="insp-metrics"></div>
+          </div>
+
+          <!-- Balanço Downstream & KPIs Globais -->
+          <div class="panel-card plant-downstream-card">
+            <div class="panel-header">
+              <div class="panel-title">Balanço Downstream &amp; KPIs</div>
+            </div>
+            <div class="kpi-strip plant-kpis-compact">
+              <div class="kpi-box"><span>Título AC · R-301</span><strong id="pl-kpi-ac" class="text-amber">—</strong></div>
+              <div class="kpi-box"><span>Massa Bruta AC</span><strong id="pl-kpi-mass" class="text-cyan">—</strong></div>
+              <div class="kpi-box"><span>Clavulanato K⁺</span><strong id="pl-kpi-clavk" class="text-emerald">—</strong></div>
+              <div class="kpi-box"><span>Recuperação</span><strong id="pl-kpi-recov" class="text-sky">—</strong></div>
+              <div class="kpi-box"><span>Carga Térmica</span><strong id="pl-kpi-therm" class="text-danger">—</strong></div>
+              <div class="kpi-box"><span>Energia Espec.</span><strong id="pl-kpi-energy">—</strong></div>
+            </div>
+            <div class="ctrl-field" style="margin:8px 0">
+              <label for="downstream-route-select"><span>Rota de Captura (Área 500)</span></label>
+              <select id="downstream-route-select" class="bio-select">
+                <option value="ll_double" selected>Extração dupla · Acetato de Etila</option>
+                <option value="ll_single">Extração simples · Acetato de Etila</option>
+                <option value="ll_multistage">Extração multiestágio (~78%)</option>
+                <option value="amberlite">Resina Amberlite IRA 400</option>
+              </select>
+            </div>
+            <div id="plant-downstream-bars" class="seg-list"></div>
+            <p id="downstream-route-note" class="downstream-note"></p>
+          </div>
+        </aside>
+      </div>
+
+      <!-- Dock Inferior: Gráficos sincronizados do processo -->
+      <div class="charts-row-3" id="plant-results-charts">
+        <div class="panel-card">
+          <div class="panel-header">
+            <div class="panel-title">Evolução de Produto (AC &amp; Massa)</div>
+            <div class="chart-legend">
+              <span><i style="background:#fbbf24"></i>Título AC</span>
+              <span><i style="background:#14f1d9"></i>Massa kg</span>
+            </div>
+          </div>
+          <canvas id="plant-chart-prod" class="chart-box"></canvas>
+        </div>
+
+        <div class="panel-card">
+          <div class="panel-header">
+            <div class="panel-title">Volume Fed-Batch &amp; Biomassa Micelial</div>
+            <div class="chart-legend">
+              <span><i style="background:#38bdf8"></i>Volume m³</span>
+              <span><i style="background:#10b981"></i>Biomassa X</span>
+            </div>
+          </div>
+          <canvas id="plant-chart-feed" class="chart-box"></canvas>
+        </div>
+
+        <div class="panel-card">
+          <div class="panel-header">
+            <div class="panel-title">Carga Térmica Específica Q/V (kW/m³)</div>
+            <div class="chart-legend">
+              <span><i style="background:#f97316"></i>Q/V real</span>
+              <span><i style="background:#ef4444"></i>Limite 3,0</span>
+            </div>
+          </div>
+          <canvas id="plant-chart-therm" class="chart-box"></canvas>
+        </div>
+      </div>
+    </section>
+
+    <!-- ======================================================================
+         ABA 2: CLAVIS DIGITAL TWIN — MÓDULO 02: BIORREATOR STR – BR-301 (60 m³)
+         Reproduz fielmente o layout BIOFACTORY CONTROL CENTER + Galeria 3D
+         ====================================================================== -->
+    <section id="tab-reactor" class="tab-panel">
+      <div class="rx-workspace">
+        <!-- MENU LATERAL ESQUERDO CLAVIS (Idêntico à referência visual) -->
+        <nav class="plant-nav rx-nav" aria-label="Navegação CLAVIS Biorreator">
+          <div class="plant-nav-brand">
+            <span class="plant-nav-mark" aria-hidden="true">
+              <svg viewBox="0 0 36 36" width="28" height="28" fill="none" stroke="currentColor" stroke-width="1.8">
+                <polygon points="18,3 31,10.5 31,25.5 18,33 5,25.5 5,10.5" fill="rgba(20,241,217,0.14)" />
+                <circle cx="18" cy="18" r="4" fill="currentColor" />
+                <line x1="18" y1="3" x2="18" y2="14" />
+                <line x1="31" y1="10.5" x2="21.5" y2="16" />
+                <line x1="31" y1="25.5" x2="21.5" y2="20" />
+                <line x1="18" y1="33" x2="18" y2="22" />
+                <line x1="5" y1="25.5" x2="14.5" y2="20" />
+                <line x1="5" y1="10.5" x2="14.5" y2="16" />
+              </svg>
+            </span>
+            <div>
+              <strong>CLAVIS</strong>
+              <small>DIGITAL TWIN</small>
+            </div>
+          </div>
+
+          <button type="button" class="plant-nav-item" data-tab="plant">
+            <span class="nav-ico">⊞</span> Visão Geral
+          </button>
+          <button type="button" class="plant-nav-item" data-tab="plant">
+            <span class="nav-ico">🏭</span> Planta Industrial
+          </button>
+          <button type="button" class="plant-nav-item active" data-tab="reactor">
+            <span class="nav-ico">🧪</span> Biorreator STR
+          </button>
+          <button type="button" class="plant-nav-item" data-tab="cell">
+            <span class="nav-ico">🧬</span> Célula / Metabolismo
+          </button>
+
+          <div class="plant-nav-divider"></div>
+
+          <button type="button" class="plant-nav-item" data-rx-nav="simulation">
+            <span class="nav-ico">⚙</span> Simulação
+          </button>
+          <button type="button" class="plant-nav-item" data-rx-nav="operation">
+            <span class="nav-ico">👷</span> Operação
+          </button>
+          <button type="button" class="plant-nav-item" data-rx-nav="results">
+            <span class="nav-ico">📈</span> Resultados
+          </button>
+          <button type="button" class="plant-nav-item" data-rx-nav="perspectives">
+            <span class="nav-ico">🧊</span> Camadas 3D / Cortes
+          </button>
+          <button type="button" class="plant-nav-item" data-rx-nav="alarms">
+            <span class="nav-ico">⚠</span> Alarmes
+            <b class="plant-nav-badge" id="rx-nav-alarm-badge">2</b>
+          </button>
+          <button type="button" class="plant-nav-item" data-rx-nav="reports">
+            <span class="nav-ico">📄</span> Relatórios
+          </button>
+          <button type="button" class="plant-nav-item" data-rx-nav="settings">
+            <span class="nav-ico">🎛</span> Configurações
+          </button>
+
+          <!-- Cartão de Status da Planta e Usuário no rodapé lateral (igual à imagem) -->
+          <div class="rx-nav-status-box">
+            <div class="rx-nav-status-label">STATUS DA PLANTA</div>
+            <div class="rx-nav-status-state" id="rx-nav-plant-state">
+              <i class="status-dot"></i><span>OPERACIONAL</span>
+            </div>
+            <small id="rx-nav-plant-sub">Modelo sincronizado em tempo real</small>
+          </div>
+
+          <div class="rx-nav-user-box">
+            <div class="rx-user-avatar">AD</div>
+            <div class="rx-user-info">
+              <strong>Admin User</strong>
+              <small>Engenharia de Bioprocessos</small>
+            </div>
+          </div>
+        </nav>
+
+        <!-- COLUNA PRINCIPAL DO MÓDULO BIORREATOR -->
+        <div class="rx-main-area">
+          <!-- CABEÇALHO SUPERIOR DO BIORREATOR STR – BR-301 -->
+          <div class="rx-topbar">
+            <div class="rx-topbar-left">
+              <div class="rx-title-row">
+                <h2>Biorreator STR – BR-301</h2>
+                <span class="rx-op-pill" id="rx-op-pill"><i class="status-dot"></i><b id="rx-op-text">EM OPERAÇÃO</b></span>
+              </div>
+              <p class="rx-subtitle" id="rx-subtitle">
+                Produção de Ácido Clavulânico <span>|</span> <em>Streptomyces clavuligerus</em> <span>|</span> <strong id="rx-scenario-banner">Fermentação Fed-batch (FEN22 · 41,92 m³)</strong>
+              </p>
+            </div>
+
+            <div class="rx-topbar-right">
+              <div class="rx-sim-time-pill">
+                Tempo de Simulação: <strong id="rx-top-time">t = 96,0 h</strong>
+              </div>
+              <div class="rx-mini-transport">
+                <button type="button" class="rx-tr-btn" id="rx-btn-play" title="Play / Pause Simulação">❚❚</button>
+                <button type="button" class="rx-tr-btn" id="rx-btn-restart" title="Reiniciar Simulação (t = 0 h)">↺</button>
+                <button type="button" class="rx-tr-btn" id="rx-btn-peak" title="Saltar para o Pico de Produção AC">★ Pico</button>
+                <select id="rx-speed-select" class="rx-tr-select" title="Velocidade de Reprodução">
+                  <option value="1">1×</option>
+                  <option value="4" selected>4×</option>
+                  <option value="12">12×</option>
+                </select>
+              </div>
+              <button type="button" class="bio-btn bio-btn-primary" id="btn-toggle-3d-gallery" title="Rolar para Galeria Multi-Perspectiva 3D">
+                🧊 Galeria 8 Camadas 3D
+              </button>
+            </div>
+          </div>
+
+          <!-- GRADE PRINCIPAL: COLUNA ESQUERDA (6 INDICADORES) + CENTRO (BIORREATOR 3D) + COLUNA DIREITA (STATUS, CONTROLE, CAMADAS) -->
+          <div class="reactor-top-grid">
+            <!-- 1. COLUNA ESQUERDA: 6 Cartões de Indicadores com Sparklines, Limites e Estado (Seção 6) -->
+            <div class="spark-col">
+              <!-- Card 1: pH -->
+              <div class="spark-card" id="card-ind-ph">
+                <div class="spark-header-row">
+                  <span class="spark-ico">⚗</span>
+                  <span class="spark-label">pH</span>
+                  <span class="spark-state-badge state-ok" id="rx-state-ph">NOMINAL</span>
+                </div>
+                <div class="spark-val-row">
+                  <span class="spark-val text-emerald" id="rx-val-ph">6,90</span>
+                  <span class="spark-tol-pill tol-emerald" id="rx-tol-ph">±0,05</span>
+                  <small class="spark-ref-note">Ref: 6,90 ± 0,30</small>
+                </div>
+                <canvas id="rx-spark-ph" class="spark-canvas"></canvas>
+              </div>
+
+              <!-- Card 2: Temperatura -->
+              <div class="spark-card" id="card-ind-temp">
+                <div class="spark-header-row">
+                  <span class="spark-ico">🌡</span>
+                  <span class="spark-label">Temperatura</span>
+                  <span class="spark-state-badge state-ok" id="rx-state-temp">24 °C PROD</span>
+                </div>
+                <div class="spark-val-row">
+                  <span class="spark-val text-violet" id="rx-val-temp">24,0 °C</span>
+                  <span class="spark-tol-pill tol-violet" id="rx-tol-temp">±0,2 °C</span>
+                  <small class="spark-ref-note">26→24 °C (&gt;36h)</small>
+                </div>
+                <canvas id="rx-spark-temp" class="spark-canvas"></canvas>
+              </div>
+
+              <!-- Card 3: Oxigênio Dissolvido (DO) -->
+              <div class="spark-card" id="card-ind-do">
+                <div class="spark-header-row">
+                  <span class="spark-ico">🫧</span>
+                  <span class="spark-label">Oxigênio Dissolvido (DO)</span>
+                  <span class="spark-state-badge state-ok" id="rx-state-do">PISO &gt;20%</span>
+                </div>
+                <div class="spark-val-row">
+                  <span class="spark-val text-cyan" id="rx-val-do">42,8 %</span>
+                  <span class="spark-tol-pill tol-cyan" id="rx-tol-do">±1,0 %</span>
+                  <small class="spark-ref-note" id="rx-ref-do">OUR: —</small>
+                </div>
+                <canvas id="rx-spark-do" class="spark-canvas"></canvas>
+              </div>
+
+              <!-- Card 4: Biomassa Micelial (X) -->
+              <div class="spark-card" id="card-ind-x">
+                <div class="spark-header-row">
+                  <span class="spark-ico">🌿</span>
+                  <span class="spark-label">Biomassa (X)</span>
+                  <span class="spark-state-badge state-ok" id="rx-state-x">MICELIAL</span>
+                </div>
+                <div class="spark-val-row">
+                  <span class="spark-val text-emerald" id="rx-val-x">21,4 g·L⁻¹</span>
+                  <span class="spark-tol-pill tol-emerald" id="rx-tol-x">μ = 0,02 h⁻¹</span>
+                  <small class="spark-ref-note" id="rx-ref-x">Pico: —</small>
+                </div>
+                <canvas id="rx-spark-x" class="spark-canvas"></canvas>
+              </div>
+
+              <!-- Card 5: Ácido Clavulânico Extracelular (Pe) -->
+              <div class="spark-card" id="card-ind-ac">
+                <div class="spark-header-row">
+                  <span class="spark-ico">✨</span>
+                  <span class="spark-label">Ácido Clavulânico (Pe)</span>
+                  <span class="spark-state-badge state-ok" id="rx-state-ac">PRODUTO</span>
+                </div>
+                <div class="spark-val-row">
+                  <span class="spark-val text-amber" id="rx-val-ac">0,682 g·L⁻¹</span>
+                  <span class="spark-tol-pill tol-amber" id="rx-tol-ac">682 mg/L</span>
+                  <small class="spark-ref-note" id="rx-ref-ac">Lote: — kg</small>
+                </div>
+                <canvas id="rx-spark-ac" class="spark-canvas"></canvas>
+              </div>
+
+              <!-- Card 6: Viscosidade Aparente (μ_app) -->
+              <div class="spark-card" id="card-ind-visc">
+                <div class="spark-header-row">
+                  <span class="spark-ico">💧</span>
+                  <span class="spark-label">Viscosidade (μ<sub>app</sub>)</span>
+                  <span class="spark-state-badge state-warn" id="rx-state-visc">REOLOGIA</span>
+                </div>
+                <div class="spark-val-row">
+                  <span class="spark-val text-cyan" id="rx-val-visc">488 mPa·s</span>
+                  <span class="spark-tol-pill tol-cyan" id="rx-tol-visc">γ̇ 145 s⁻¹</span>
+                  <small class="spark-ref-note">Calib: ≤14,5 mPa·s</small>
+                </div>
+                <canvas id="rx-spark-visc" class="spark-canvas"></canvas>
+              </div>
+            </div>
+
+            <!-- 2. CENTRO: BIORREATOR TRIDIMENSIONAL THREE.JS + INSTRUMENTAÇÃO COM LINHAS DE CHAMADA -->
+            <div class="panel-card reactor-stage-card">
+              <div class="rx-3d-header">
+                <div class="rx-3d-title">
+                  <i class="cyan-dot"></i>
+                  <span>DIGITAL TWIN — BR-301 (R-301 · STR 60 m³ · 3× RUSHTON)</span>
+                </div>
+                <div class="rx-3d-mode-pills" aria-label="Modos de visualização 3D do biorreator">
+                  <button type="button" class="rx-mode-pill active" data-rx-3dmode="realista">3D Realista</button>
+                  <button type="button" class="rx-mode-pill" data-rx-3dmode="transparente">Transparente</button>
+                  <button type="button" class="rx-mode-pill" data-rx-3dmode="corte">Vista em Corte</button>
+                  <button type="button" class="rx-mode-pill" data-rx-3dmode="explodida">Explodida</button>
+                  <button type="button" class="rx-mode-pill" data-rx-3dmode="externa">Visão Externa</button>
+                </div>
+              </div>
+
+              <div class="reactor-canvas-wrap" id="reactor-canvas-wrap">
+                <canvas id="reactor-canvas"></canvas>
+
+                <!-- SVG de linhas de chamada conectando os cartões de instrumentação aos sensores 3D -->
+                <svg id="rx-callout-svg" class="rx-callout-svg" aria-hidden="true"></svg>
+
+                <!-- Coluna Esquerda de Instrumentação ISA-5.1 no Palco 3D -->
+                <div class="rx-hud-col rx-hud-left">
+                  <div class="rx-hud-box" data-sensor-box="AIC-301">
+                    <strong>AIC-301</strong>
+                    <span class="hud-val text-emerald" id="hud-val-aic">pH: 6,90</span>
+                    <small id="hud-sub-aic">Setpoint: 6,90 ± 0,05</small>
+                  </div>
+                  <div class="rx-hud-box" data-sensor-box="FIC-301">
+                    <strong>FIC-301</strong>
+                    <span class="hud-val text-cyan" id="hud-val-fic">Ar: 0,50 vvm</span>
+                    <small id="hud-sub-fic">(21,0 m³·min⁻¹ | Alim: 85 L/h)</small>
+                  </div>
+                  <div class="rx-hud-box" data-sensor-box="LIC-301">
+                    <strong>LIC-301</strong>
+                    <span class="hud-val text-emerald" id="hud-val-lic">Volume: 41,92 m³</span>
+                    <small id="hud-sub-lic">(70,0 % de 60 m³ geom.)</small>
+                  </div>
+                  <div class="rx-hud-box" data-sensor-box="M-301">
+                    <strong>M-301 / RPM</strong>
+                    <span class="hud-val text-emerald" id="hud-val-m301">Agitador: 105,7 rpm</span>
+                    <small id="hud-sub-m301">Torque: 8,45 / 9,15 kN·m</small>
+                  </div>
+                </div>
+
+                <!-- Coluna Direita de Instrumentação ISA-5.1 no Palco 3D -->
+                <div class="rx-hud-col rx-hud-right">
+                  <div class="rx-hud-box" data-sensor-box="TIC-301">
+                    <strong>TIC-301</strong>
+                    <span class="hud-val text-cyan" id="hud-val-tic">Temp.: 24,0 °C</span>
+                    <small id="hud-sub-tic">Q/V: 10,24 kW/m³ (Serp.+Camisa)</small>
+                  </div>
+                  <div class="rx-hud-box" data-sensor-box="DO-301">
+                    <strong>DO-301 / OIC</strong>
+                    <span class="hud-val text-emerald" id="hud-val-do">DO: 42,8 %</span>
+                    <small id="hud-sub-do">OUR: 38,4 mmol·L⁻¹·h⁻¹</small>
+                  </div>
+                  <div class="rx-hud-box rx-hud-box-gold" data-sensor-box="R-301">
+                    <strong>R-301 / BR-301</strong>
+                    <span class="hud-val text-sky">STR – 60 m³</span>
+                    <small id="hud-sub-r301">(Vu: 41,92 m³ | 3× Rushton)</small>
+                  </div>
+                  <div class="rx-hud-box" data-sensor-box="KLA-301">
+                    <strong>k<sub>L</sub>a (calc.)</strong>
+                    <span class="hud-val text-emerald" id="hud-val-kla">331 h⁻¹</span>
+                    <small id="hud-sub-kla">Modelo: Caldo (R-48)</small>
+                  </div>
+                </div>
+
+                <!-- Dock Inferior de Controles 3D (6 botões estilo BioFactory Control Center) -->
+                <div class="rx-3d-dock" aria-label="Controles da câmera 3D do biorreator">
+                  <button type="button" class="dock-ico-btn active" data-rx-cam="reset" title="Vista Frontal 3D Padrão">
+                    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 3L4 7.5v9L12 21l8-4.5v-9L12 3z"/><path d="M12 12l8-4.5"/><path d="M12 12v9"/><path d="M12 12L4 7.5"/></svg>
+                  </button>
+                  <button type="button" class="dock-ico-btn" data-rx-cam="zoom-in" title="Aproximar Zoom (+)">
+                    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.35-4.35M11 8v6M8 11h6"/></svg>
+                  </button>
+                  <button type="button" class="dock-ico-btn" data-rx-cam="zoom-out" title="Afastar Zoom (-)">
+                    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.35-4.35M8 11h6"/></svg>
+                  </button>
+                  <button type="button" class="dock-ico-btn" data-rx-cam="autorotate" title="Girar 360° Automaticamente">
+                    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M21 12a9 9 0 1 1-2.64-6.36"/><polyline points="21 3 21 9 15 9"/></svg>
+                  </button>
+                  <button type="button" class="dock-ico-btn" data-rx-cam="explode" title="Alternar Visualização Explodida de Componentes">
+                    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8"><polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 12 12 17 22 12"/><polyline points="2 17 12 22 22 17"/></svg>
+                  </button>
+                  <button type="button" class="dock-ico-btn" data-rx-cam="gallery" title="Ir para Galeria de 8 Camadas e Perspectivas 3D">
+                    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <!-- 3. COLUNA DIREITA: STATUS DO REATOR + PAINEL DE CONTROLE + CAMADAS DE VISUALIZAÇÃO 3D -->
+            <aside class="reactor-right-col">
+              <!-- Card 1: STATUS DO REATOR (Seção 1 e 5) -->
+              <div class="panel-card rx-status-card">
+                <div class="panel-header">
+                  <div class="panel-title">Status do Reator</div>
+                  <span class="rx-inline-status" id="rx-card-status"><i class="status-dot"></i>EM OPERAÇÃO</span>
+                </div>
+                <div class="status-rows">
+                  <div class="status-row"><span>ID da Batelada</span><strong id="rx-stat-batch" class="text-cyan">FEN22-AC-015</strong></div>
+                  <div class="status-row"><span>Fase Operacional</span><strong id="rx-stat-phase" class="text-emerald">Pico de Produção AC</strong></div>
+                  <div class="status-row"><span>Tempo Decorrido</span><strong id="rx-stat-time">96,0 h / 170,0 h</strong></div>
+                  <div class="status-row"><span>Volume Útil Atual</span><strong id="rx-stat-vol">41,92 m³ (70,0 %)</strong></div>
+                  <div class="status-row"><span>Cenário &amp; Origem</span><strong id="rx-stat-scenario" class="text-amber">FEN22 (Industrial)</strong></div>
+                  <div class="status-row"><span>Massa AC no Lote</span><strong id="rx-stat-mass">—</strong></div>
+                  <div class="status-row"><span>Torque / Potência</span><strong id="rx-stat-torque">—</strong></div>
+                  <div class="status-row"><span>Carga Térmica Q/V</span><strong id="rx-stat-therm">—</strong></div>
+                  <div class="status-row"><span>Cisalhamento / φ(γ̇)</span><strong id="rx-stat-shear">—</strong></div>
+                </div>
+                <div class="rx-scenario-disclaimer" id="rx-scenario-disclaimer">
+                  Cenário FEN22 (41,92 m³). Para consultar a referência preliminar (~577 mg/L @ 99h, ~20 kg/batelada — estimativa com incertezas, não validada experimentalmente), selecione "Modelo Preliminar" abaixo.
+                </div>
+              </div>
+
+              <!-- Card 2: PAINEL DE CONTROLE (Seção 8) -->
+              <div class="panel-card rx-control-card" id="rx-control-card">
+                <div class="panel-header">
+                  <div class="panel-title">Painel de Controle</div>
+                  <span class="model-coupled-badge" title="Todas as alterações recalculam o sistema de EDOs do motor matemático">⚡ Acoplado ao Modelo</span>
+                </div>
+
+                <div class="rx-mode-row">
+                  <span>Modo de Operação</span>
+                  <div class="segmented-group">
+                    <button type="button" class="seg-btn" data-ctrl-mode="manual">MANUAL</button>
+                    <button type="button" class="seg-btn active" data-ctrl-mode="fixed">AUTO</button>
+                    <button type="button" class="seg-btn" data-ctrl-mode="do_cascade">CASCATA</button>
+                  </div>
+                </div>
+
+                <!-- Tabela Resumo de Setpoints (estilo imagem de referência) -->
+                <div class="rx-setpoints-head">Setpoints &amp; Condições Operacionais</div>
+                <div class="rx-setpoints-table">
+                  <div class="rx-sp-row">
+                    <span>pH (AIC-301)</span>
+                    <strong id="sp-tbl-ph">6,90</strong>
+                    <b class="sp-tol tol-emerald">±0,05</b>
+                  </div>
+                  <div class="rx-sp-row">
+                    <span>Temperatura (TIC-301)</span>
+                    <strong id="sp-tbl-temp">24,0 °C</strong>
+                    <b class="sp-tol tol-violet">±0,2</b>
+                  </div>
+                  <div class="rx-sp-row">
+                    <span>Oxigênio Dissolvido</span>
+                    <strong id="sp-tbl-do">≥ 30,0 %</strong>
+                    <b class="sp-tol tol-cyan">±1,0</b>
+                  </div>
+                  <div class="rx-sp-row">
+                    <span>Rotação (Agitador M-301)</span>
+                    <strong id="sp-tbl-rpm">105,7 rpm</strong>
+                    <b class="sp-tol tol-emerald">±5</b>
+                  </div>
+                  <div class="rx-sp-row">
+                    <span>Vazão de Ar (FIC-301)</span>
+                    <strong id="sp-tbl-vvm">0,50 vvm</strong>
+                    <b class="sp-tol tol-emerald">±0,05</b>
+                  </div>
+                </div>
+
+                <!-- Controles Interativos que recalculam a simulação matemática -->
+                <div class="ctrl-group rx-ctrl-sliders">
+                  <div class="ctrl-field">
+                    <label for="ctrl-scenario-quick"><span>Cenário de Referência (Seção 5)</span></label>
+                    <select id="ctrl-scenario-quick" class="bio-select">
+                      <option value="fen22_grupo">FEN22 Grupo (41,92 m³ · 3,32 mol C/L)</option>
+                      <option value="preliminar_ref">Modelo Preliminar (~577 mg/L @ 99h · ~20 kg)</option>
+                      <option value="ribeiro_rec">Ribeiro RIB21 (Calibração 15 g/L Glicerol)</option>
+                      <option value="fen22_industrial">FEN22 Industrial (125 rpm · Cepa 3,74×)</option>
+                    </select>
+                  </div>
+                  <div class="rx-ctrl-2col">
+                    <div class="ctrl-field">
+                      <label for="ctrl-medium"><span>Meio de Cultivo</span></label>
+                      <select id="ctrl-medium" class="bio-select">
+                        <option value="fen22">FEN22 (3,32 mol C/L)</option>
+                        <option value="ribeiro">RIB21 (Glicerol 15 g/L)</option>
+                      </select>
+                    </div>
+                    <div class="ctrl-field">
+                      <label for="ctrl-strategy"><span>Estratégia Fed-Batch</span></label>
+                      <select id="ctrl-strategy" class="bio-select">
+                        <option value="E">E — Receita FEN22</option>
+                        <option value="D">D — Limitação 2 g/L</option>
+                        <option value="A">A — Vazão Constante</option>
+                        <option value="F">F — Demanda 120 g/L</option>
+                      </select>
+                    </div>
+                  </div>
+                  <div class="ctrl-field">
+                    <label for="ctrl-kla"><span>Modelo de Transferência k<sub>L</sub>a</span></label>
+                    <select id="ctrl-kla" class="bio-select">
+                      <option value="caldo">Caldo Filamentoso (Padrão R-48)</option>
+                      <option value="agua">Água (Intermediária)</option>
+                      <option value="metodoC">Método C (Refutado R-45)</option>
+                    </select>
+                  </div>
+                  <div class="ctrl-field">
+                    <label for="ctrl-rpm"><span>Rotação (N · Altera EDO)</span><strong id="ctrl-rpm-val">105.7 rpm</strong></label>
+                    <input type="range" id="ctrl-rpm" class="bio-slider" min="80" max="200" step="0.1" value="105.7" />
+                  </div>
+                  <div class="ctrl-field">
+                    <label for="ctrl-vvm"><span>Vazão de Ar (vvm · Altera EDO)</span><strong id="ctrl-vvm-val">0.50 vvm</strong></label>
+                    <input type="range" id="ctrl-vvm" class="bio-slider" min="0.20" max="1.00" step="0.05" value="0.50" />
+                  </div>
+                  <div class="rx-ctrl-2col">
+                    <div class="ctrl-field">
+                      <label for="ctrl-temp-prod"><span>Temp. Prod.</span><strong id="ctrl-temp-prod-val">24.0 °C</strong></label>
+                      <input type="range" id="ctrl-temp-prod" class="bio-slider" min="22.0" max="28.0" step="0.5" value="24.0" />
+                    </div>
+                    <div class="ctrl-field">
+                      <label for="ctrl-ph"><span>Setpoint pH</span><strong id="ctrl-ph-val">6.90</strong></label>
+                      <input type="range" id="ctrl-ph" class="bio-slider" min="6.20" max="7.50" step="0.05" value="6.90" />
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Card 3: CAMADAS DE VISUALIZAÇÃO (3D) (Seção 9 e Imagem 1) -->
+              <div class="panel-card rx-layers-card">
+                <div class="panel-header">
+                  <div class="panel-title">Camadas de Visualização (3D)</div>
+                  <span class="visual-only-badge" title="Altera apenas a visualização fenomenológica interna sem modificar as EDOs">👁 Visual 3D</span>
+                </div>
+                <div class="rx-layer-cards-list">
+                  <label class="rx-layer-row">
+                    <div class="rx-layer-thumb thumb-hydro"></div>
+                    <div class="rx-layer-txt">
+                      <strong>Hidrodinâmica</strong>
+                      <small>(Mistura / Agitação)</small>
+                    </div>
+                    <input type="checkbox" class="rx-switch" data-rx-layer="hydro" checked />
+                  </label>
+                  <label class="rx-layer-row">
+                    <div class="rx-layer-thumb thumb-oxygen"></div>
+                    <div class="rx-layer-txt">
+                      <strong>Aeração</strong>
+                      <small>(Distribuição de O₂ / Bolhas)</small>
+                    </div>
+                    <input type="checkbox" class="rx-switch" data-rx-layer="oxygen" checked />
+                  </label>
+                  <label class="rx-layer-row">
+                    <div class="rx-layer-thumb thumb-mycelium"></div>
+                    <div class="rx-layer-txt">
+                      <strong>Micélio</strong>
+                      <small>(Crescimento Filamentoso de X)</small>
+                    </div>
+                    <input type="checkbox" class="rx-switch" data-rx-layer="mycelium" checked />
+                  </label>
+                  <label class="rx-layer-row">
+                    <div class="rx-layer-thumb thumb-product"></div>
+                    <div class="rx-layer-txt">
+                      <strong>Ácido Clavulânico</strong>
+                      <small>(Biossíntese Pi / Liberação Pe)</small>
+                    </div>
+                    <input type="checkbox" class="rx-switch" data-rx-layer="product" checked />
+                  </label>
+                </div>
+                <p class="rx-mixing-note">
+                  Nota: Modelo de mistura perfeita. As camadas representam fenômenos qualitativos, sem gradientes espaciais CFD.
+                </p>
+              </div>
+            </aside>
+          </div>
+
+          <!-- REGIÃO INFERIOR: VISÃO DO PROCESSO + EVOLUÇÃO TEMPORAL MULTIPARAMÉTRICA + ALARMES -->
+          <div class="reactor-bottom-grid" id="rx-bottom-section">
+            <!-- Card Inferior Esquerdo: VISÃO DO PROCESSO (Imagem 1) + 7 Fases Fed-Batch -->
+            <div class="panel-card">
+              <div class="panel-header">
+                <div class="panel-title">Visão do Processo</div>
+                <span class="text-cyan" style="font-size:10px;font-family:var(--font-mono)" id="rx-proc-phase-label">Fase: Pico de Produção AC</span>
+              </div>
+              <div class="rx-unitop-chain">
+                <div class="rx-unitop-step done" data-jump-plant="V-101">
+                  <div class="rx-unitop-circle">⚗</div>
+                  <strong>Preparo de Meios</strong>
+                  <small>(V-101 / V-102)</small>
+                  <i class="rx-unitop-check">✓</i>
+                </div>
+                <span class="rx-unitop-arr">→</span>
+                <div class="rx-unitop-step done" data-jump-plant="R-201">
+                  <div class="rx-unitop-circle">🌱</div>
+                  <strong>Inóculo e Ar</strong>
+                  <small>(R-201 / F-201)</small>
+                  <i class="rx-unitop-check">✓</i>
+                </div>
+                <span class="rx-unitop-arr">→</span>
+                <div class="rx-unitop-step active">
+                  <div class="rx-unitop-circle">🧪</div>
+                  <strong>Fermentação</strong>
+                  <small>(BR-301 · 60 m³)</small>
+                  <i class="rx-unitop-check active-dot">●</i>
+                </div>
+                <span class="rx-unitop-arr">→</span>
+                <div class="rx-unitop-step done" data-jump-plant="C-401">
+                  <div class="rx-unitop-circle">⚙</div>
+                  <strong>Colheita</strong>
+                  <small>(T-401 / C-401)</small>
+                  <i class="rx-unitop-check">✓</i>
+                </div>
+                <span class="rx-unitop-arr">→</span>
+                <div class="rx-unitop-step done" data-jump-plant="EX-401">
+                  <div class="rx-unitop-circle">💧</div>
+                  <strong>Extração</strong>
+                  <small>(EX-401 / EV-501)</small>
+                  <i class="rx-unitop-check">✓</i>
+                </div>
+                <span class="rx-unitop-arr">→</span>
+                <div class="rx-unitop-step done" data-jump-plant="CR-501">
+                  <div class="rx-unitop-circle">💎</div>
+                  <strong>Purificação</strong>
+                  <small>(CR-501 / DR-501)</small>
+                  <i class="rx-unitop-check">✓</i>
+                </div>
+              </div>
+              <div id="rx-phase-pipeline" class="phase-pipeline" style="margin-top:8px"></div>
+            </div>
+
+            <!-- Card Inferior Central: EVOLUÇÃO TEMPORAL DO PROCESSO (Seção 10 — 6 variáveis sincronizadas) -->
+            <div class="panel-card">
+              <div class="panel-header">
+                <div class="panel-title">Evolução Temporal do Processo</div>
+                <div class="segmented-group rx-chart-tabs">
+                  <button type="button" class="seg-btn active" data-rx-chart-mode="kinetics">X, Pi &amp; Pe</button>
+                  <button type="button" class="seg-btn" data-rx-chart-mode="do_vol">DO% &amp; Volume</button>
+                  <button type="button" class="seg-btn" data-rx-chart-mode="visc_temp">Visc. &amp; Temp.</button>
+                  <button type="button" class="seg-btn" data-rx-chart-mode="all6">6 Variáveis</button>
+                </div>
+              </div>
+              <div class="chart-legend" id="rx-trend-legend" style="margin-bottom:6px">
+                <span><i style="background:#10b981"></i>Biomassa (X)</span>
+                <span><i style="background:#f59e0b"></i>Pi (intracelular)</span>
+                <span><i style="background:#22d3ee"></i>Pe (extracelular)</span>
+                <span><i style="background:#38bdf8"></i>DO (%)</span>
+              </div>
+              <canvas id="rx-chart-trends" class="chart-box" style="height:152px"></canvas>
+            </div>
+
+            <!-- Card Inferior Direito: ALARMES (Seção 10 — Reais do Modelo vs Informativos) -->
+            <div class="panel-card" id="rx-alarms-card">
+              <div class="panel-header">
+                <div class="panel-title">Alarmes</div>
+                <span id="rx-alarms-count" class="text-danger" style="font-family:var(--font-mono);font-size:10.5px;font-weight:700">2 ATIVOS</span>
+              </div>
+              <div id="rx-alarms-list" class="alarms-list"></div>
+            </div>
+          </div>
+
+          <!-- ==================================================================
+               GALERIA MULTI-PERSPECTIVA 3D & VISUALIZAÇÃO EXPLODIDA (IMAGEM 2)
+               "Camadas de Visualização 3D — Biorreator STR (BR-301)"
+               ================================================================== -->
+          <div class="panel-card rx-gallery-section" id="rx-multiperspective-gallery">
+            <div class="rx-gallery-header">
+              <div>
+                <h3>Camadas de Visualização 3D — Biorreator STR (BR-301)</h3>
+                <p>Múltiplas perspectivas para análise do processo de fermentação · Representações qualitativas sincronizadas ao modelo matemático</p>
+              </div>
+              <div class="rx-gallery-badge">
+                <span>BR-301 | Fermentação (<b id="gal-scenario-tag">FEN22</b>)</span>
+                <span class="gal-live-dot"><i class="status-dot"></i>EM OPERAÇÃO</span>
+              </div>
+            </div>
+
+            <!-- Grade 4×2 com as 8 Perspectivas da Imagem 2 -->
+            <div class="rx-perspectives-grid">
+              <div class="rx-persp-card" data-persp-select="externa">
+                <div class="rx-persp-head"><span class="persp-cube">🧊</span><strong>Visão Externa</strong><small>(Equipamento)</small></div>
+                <canvas class="rx-persp-canvas" data-persp-canvas="externa"></canvas>
+              </div>
+              <div class="rx-persp-card" data-persp-select="corte">
+                <div class="rx-persp-head"><span class="persp-cube">🧊</span><strong>Vista em Corte</strong><small>(Seção Interna)</small></div>
+                <canvas class="rx-persp-canvas" data-persp-canvas="corte"></canvas>
+              </div>
+              <div class="rx-persp-card" data-persp-select="hydro">
+                <div class="rx-persp-head"><span class="persp-cube">🧊</span><strong>Hidrodinâmica</strong><small>(Escoamento Qualitativo)</small></div>
+                <canvas class="rx-persp-canvas" data-persp-canvas="hydro"></canvas>
+              </div>
+              <div class="rx-persp-card" data-persp-select="do">
+                <div class="rx-persp-head"><span class="persp-cube">🧊</span><strong>Oxigênio Dissolvido</strong><small>(DO %)</small></div>
+                <canvas class="rx-persp-canvas" data-persp-canvas="do"></canvas>
+              </div>
+              <div class="rx-persp-card" data-persp-select="bubbles">
+                <div class="rx-persp-head"><span class="persp-cube">🧊</span><strong>Dispersão de Gás</strong><small>(Aeração + Lupa)</small></div>
+                <canvas class="rx-persp-canvas" data-persp-canvas="bubbles"></canvas>
+              </div>
+              <div class="rx-persp-card" data-persp-select="biomass">
+                <div class="rx-persp-head"><span class="persp-cube">🧊</span><strong>Concentração Biomassa</strong><small>(X · g·L⁻¹)</small></div>
+                <canvas class="rx-persp-canvas" data-persp-canvas="biomass"></canvas>
+              </div>
+              <div class="rx-persp-card" data-persp-select="kla">
+                <div class="rx-persp-head"><span class="persp-cube">🧊</span><strong>Transferência de Massa</strong><small>(k<sub>L</sub>a · h⁻¹)</small></div>
+                <canvas class="rx-persp-canvas" data-persp-canvas="kla"></canvas>
+              </div>
+              <div class="rx-persp-card" data-persp-select="temp">
+                <div class="rx-persp-head"><span class="persp-cube">🧊</span><strong>Temperatura</strong><small>(Perfil Térmico °C)</small></div>
+                <canvas class="rx-persp-canvas" data-persp-canvas="temp"></canvas>
+              </div>
+            </div>
+
+            <!-- Rodapé da Galeria (Imagem 2): Controle das Camadas + Visualização Explodida (Componentes) + Vista 360° Interativa -->
+            <div class="rx-gallery-bottom-grid">
+              <!-- Painel 1: Controle das Camadas -->
+              <div class="rx-gal-subcard">
+                <div class="rx-persp-head"><strong>Controle das Camadas</strong></div>
+                <div class="rx-gal-toggles">
+                  <label><span>🧊 Equipamento (3D)</span><input type="checkbox" class="rx-switch" data-gal-toggle="vessel" checked /></label>
+                  <label><span>🌀 Escoamento (Hidrodinâmica)</span><input type="checkbox" class="rx-switch" data-rx-layer="hydro" checked /></label>
+                  <label><span>🫧 Distribuição de DO &amp; Bolhas</span><input type="checkbox" class="rx-switch" data-rx-layer="oxygen" checked /></label>
+                  <label><span>🌿 Biomassa Micelial (X)</span><input type="checkbox" class="rx-switch" data-rx-layer="mycelium" checked /></label>
+                  <label><span>✨ Ácido Clavulânico (Pi / Pe)</span><input type="checkbox" class="rx-switch" data-rx-layer="product" checked /></label>
+                </div>
+              </div>
+
+              <!-- Painel 2: Visualização Explodida (Componentes) -->
+              <div class="rx-gal-subcard">
+                <div class="rx-persp-head">
+                  <span class="persp-cube">🧊</span><strong>Visualização Explodida</strong><small>(Componentes Mecânicos)</small>
+                </div>
+                <div class="rx-exploded-wrap">
+                  <canvas id="rx-exploded-canvas" class="rx-exploded-canvas"></canvas>
+                  <div class="rx-exploded-checks">
+                    <label><input type="checkbox" data-rx-comp="topHead" checked /> Tampa e conexões</label>
+                    <label><input type="checkbox" data-rx-comp="oRing" checked /> Vedação (O-ring)</label>
+                    <label><input type="checkbox" data-rx-comp="vesselShell" checked /> Vaso (camisa)</label>
+                    <label><input type="checkbox" data-rx-comp="shaft" checked /> Eixo agitador</label>
+                    <label><input type="checkbox" data-rx-comp="impellers" checked /> Impulsores (3× Rushton)</label>
+                    <label><input type="checkbox" data-rx-comp="baffles" checked /> Chicanas (4×)</label>
+                    <label><input type="checkbox" data-rx-comp="bottomHead" checked /> Fundo, sparger e dreno</label>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Painel 3: Vista 360° Interativa e Opções de Visualização -->
+              <div class="rx-gal-subcard">
+                <div class="rx-persp-head"><span class="persp-cube">🧊</span><strong>Vista 360° Interativa</strong></div>
+                <div class="rx-360-wrap">
+                  <canvas id="rx-360-canvas" class="rx-360-canvas"></canvas>
+                  <div class="rx-view-options-box">
+                    <div class="rx-vo-title">Opções de Visualização</div>
+                    <label><input type="radio" name="rx-3d-viewopt" value="realista" checked /> 3D (Realista)</label>
+                    <label><input type="radio" name="rx-3d-viewopt" value="transparente" /> Transparente</label>
+                    <label><input type="radio" name="rx-3d-viewopt" value="corte" /> Seção Transversal</label>
+                    <label><input type="radio" name="rx-3d-viewopt" value="explodida" /> Explodida</label>
+                    <label><input type="radio" name="rx-3d-viewopt" value="externa" /> Equipamento Fechado</label>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ======================================================================
+         ABA 3: CLAVIS DIGITAL TWIN — MÓDULO 03: CÉLULA STREPTOMYCES CLAVULIGERUS
+         Visualização 3D Microscópica, Metabolismo e Biossíntese de Ácido Clavulânico
+         ====================================================================== -->
+    <section id="tab-cell" class="tab-panel">
+      <div class="cell-workspace">
+        <!-- 1. MENU LATERAL ESQUERDO CLAVIS -->
+        <nav class="plant-nav cell-nav" aria-label="Navegação CLAVIS Célula">
+          <div class="plant-nav-brand">
+            <span class="plant-nav-mark" aria-hidden="true">
+              <svg viewBox="0 0 36 36" width="28" height="28" fill="none" stroke="currentColor" stroke-width="1.8">
+                <polygon points="18,3 31,10.5 31,25.5 18,33 5,25.5 5,10.5" fill="rgba(20,241,217,0.14)" />
+                <circle cx="18" cy="18" r="4" fill="currentColor" />
+                <line x1="18" y1="3" x2="18" y2="14" />
+                <line x1="31" y1="10.5" x2="21.5" y2="16" />
+                <line x1="31" y1="25.5" x2="21.5" y2="20" />
+                <line x1="18" y1="33" x2="18" y2="22" />
+                <line x1="5" y1="25.5" x2="14.5" y2="20" />
+                <line x1="5" y1="10.5" x2="14.5" y2="16" />
+              </svg>
+            </span>
+            <div>
+              <strong>CLAVIS</strong>
+              <small>DIGITAL TWIN</small>
+            </div>
+          </div>
+
+          <button type="button" class="plant-nav-item" data-tab="plant">
+            <span class="nav-ico">🏭</span> Planta Industrial
+          </button>
+          <button type="button" class="plant-nav-item" data-tab="reactor">
+            <span class="nav-ico">🧪</span> Biorreator STR
+          </button>
+          <button type="button" class="plant-nav-item active" data-tab="cell">
+            <span class="nav-ico">🧬</span> Célula / Metabolismo
+          </button>
+
+          <div class="plant-nav-divider"></div>
+
+          <button type="button" class="plant-nav-item" data-cell-nav="simulation">
+            <span class="nav-ico">⚙</span> Simulação
+          </button>
+          <button type="button" class="plant-nav-item" data-cell-nav="operation">
+            <span class="nav-ico">🔬</span> Operação
+          </button>
+          <button type="button" class="plant-nav-item" data-cell-nav="results">
+            <span class="nav-ico">📈</span> Resultados
+          </button>
+          <button type="button" class="plant-nav-item" data-cell-nav="alarms">
+            <span class="nav-ico">⚠</span> Alarmes
+            <b class="plant-nav-badge" id="cell-nav-alarm-badge">2</b>
+          </button>
+          <button type="button" class="plant-nav-item" data-cell-nav="reports">
+            <span class="nav-ico">📄</span> Relatórios
+          </button>
+          <button type="button" class="plant-nav-item" data-cell-nav="settings">
+            <span class="nav-ico">🎛</span> Configurações
+          </button>
+
+          <!-- Ilustração decorativa de dupla hélice orgânica no rodapé lateral (como na imagem) -->
+          <div class="cell-nav-dna-art" aria-hidden="true">
+            <svg viewBox="0 0 160 140" width="100%" height="115" fill="none">
+              <path d="M10,125 C45,110 55,40 90,25 C120,12 135,45 155,15" stroke="rgba(34,211,238,0.45)" stroke-width="2.2" stroke-dasharray="3 3"/>
+              <path d="M25,135 C55,85 85,105 115,60 C135,30 140,18 155,5" stroke="rgba(16,185,129,0.4)" stroke-width="2.2"/>
+              <circle cx="42" cy="96" r="3" fill="#22d3ee"/>
+              <circle cx="72" cy="65" r="3.5" fill="#10b981"/>
+              <circle cx="102" cy="44" r="3" fill="#38bdf8"/>
+              <circle cx="128" cy="28" r="2.5" fill="#fbbf24"/>
+            </svg>
+            <small id="cell-nav-clock">Sincronizado · R-301 (60 m³)</small>
+          </div>
+        </nav>
+
+        <!-- 2. ÁREA PRINCIPAL DO MÓDULO 03 -->
+        <div class="cell-main-area">
+          <!-- BARRA SUPERIOR DO MÓDULO CÉLULA -->
+          <div class="cell-topbar">
+            <div class="cell-topbar-left">
+              <h2>Célula – <em>Streptomyces clavuligerus</em></h2>
+              <p>Morfologia Filamentosa <span>•</span> Metabolismo <span>•</span> Biossíntese do Ácido Clavulânico</p>
+            </div>
+
+            <div class="cell-topbar-right">
+              <div class="cell-strain-selector-wrap">
+                <label for="cell-strain-select">Cenário Genético:</label>
+                <select id="cell-strain-select" class="bio-select">
+                  <option value="wildtype">ATCC 27064 (Selvagem)</option>
+                  <option value="engineered">Δlat + claR↑ (Engenheirada)</option>
+                  <option value="industrial">FEN22 (Industrial · 3,74×/C)</option>
+                </select>
+              </div>
+
+              <div class="cell-sync-pill" id="cell-sync-pill">
+                <i class="status-dot"></i>
+                <span id="cell-sync-text">Sincronizado ao Biorreator (t = 96,0 h)</span>
+              </div>
+
+              <div class="rx-mini-transport">
+                <button type="button" class="rx-tr-btn" id="cell-btn-play" title="Play / Pause Simulação">❚❚</button>
+                <button type="button" class="rx-tr-btn" id="cell-btn-peak" title="Saltar ao Pico de Produção">★</button>
+                <select id="cell-speed-select" class="rx-tr-select" title="Velocidade da Simulação">
+                  <option value="1">1×</option>
+                  <option value="4" selected>4×</option>
+                  <option value="12">12×</option>
+                </select>
+              </div>
+            </div>
+          </div>
+
+          <!-- GRADE SUPERIOR: COLUNA ESQUERDA (INDICADORES CELULARES) + CENTRO (LENTE MICROSCÓPICA 3D) + COLUNA DIREITA (CLUSTER, METABOLISMO, METABÓLITOS) -->
+          <div class="cell-hero-grid">
+            <!-- COLUNA ESQUERDA: Indicadores Celulares (Seção 8 e Imagem de Referência) -->
+            <aside class="panel-card cell-indicators-card">
+              <div class="panel-header">
+                <div class="panel-title">Indicadores Celulares</div>
+                <span class="text-cyan" style="font-size:9.5px;font-family:var(--font-mono)">Tempo Real</span>
+              </div>
+
+              <div class="cell-ind-list">
+                <!-- 1. Biomassa (X) -->
+                <div class="cell-ind-row" title="Concentração de biomassa micelial filamentosa ativa no caldo (g/L).">
+                  <div class="cell-ind-icon ico-emerald">🌿</div>
+                  <div class="cell-ind-info">
+                    <span class="cell-ind-name">Biomassa (X)</span>
+                    <div class="cell-ind-valline">
+                      <strong id="ci-val-x">4,42 g·L⁻¹</strong>
+                      <b class="ci-delta delta-up" id="ci-del-x">↑ ativo</b>
+                    </div>
+                  </div>
+                  <canvas id="ci-spark-x" class="ci-spark"></canvas>
+                </div>
+
+                <!-- 2. Taxa de crescimento (μ) -->
+                <div class="cell-ind-row" title="Taxa específica de crescimento celular μ (h⁻¹), modulada por substrato, temperatura, pH e oxigênio.">
+                  <div class="cell-ind-icon ico-amber">⚡</div>
+                  <div class="cell-ind-info">
+                    <span class="cell-ind-name">μ (taxa de crescimento)</span>
+                    <div class="cell-ind-valline">
+                      <strong id="ci-val-mu">0,082 h⁻¹</strong>
+                      <b class="ci-delta" id="ci-del-mu">Monod</b>
+                    </div>
+                  </div>
+                  <canvas id="ci-spark-mu" class="ci-spark"></canvas>
+                </div>
+
+                <!-- 3. AC intracelular (Pi) -->
+                <div class="cell-ind-row" title="Pool intracelular de Ácido Clavulânico acumulado no citoplasma antes da liberação.">
+                  <div class="cell-ind-icon ico-orange">🟠</div>
+                  <div class="cell-ind-info">
+                    <span class="cell-ind-name">AC intracelular (P<sub>i</sub>)</span>
+                    <div class="cell-ind-valline">
+                      <strong id="ci-val-pi">0,178 g·L⁻¹</strong>
+                      <b class="ci-delta delta-up" id="ci-del-pi">178 mg/L</b>
+                    </div>
+                  </div>
+                  <canvas id="ci-spark-pi" class="ci-spark"></canvas>
+                </div>
+
+                <!-- 4. AC extracelular (Pe) -->
+                <div class="cell-ind-row" title="Concentração extracelular de Ácido Clavulânico liberado para o caldo fermentativo.">
+                  <div class="cell-ind-icon ico-cyan">🟢</div>
+                  <div class="cell-ind-info">
+                    <span class="cell-ind-name">AC extracelular (P<sub>e</sub>)</span>
+                    <div class="cell-ind-valline">
+                      <strong id="ci-val-pe">0,577 g·L⁻¹</strong>
+                      <b class="ci-delta delta-up" id="ci-del-pe">577 mg/L</b>
+                    </div>
+                  </div>
+                  <canvas id="ci-spark-pe" class="ci-spark"></canvas>
+                </div>
+
+                <!-- 5. Taxa de biossíntese (r_bio) -->
+                <div class="cell-ind-row" title="Taxa volumétrica de biossíntese intracelular de Ácido Clavulânico pelo cluster pSCL4.">
+                  <div class="cell-ind-icon ico-sky">🧬</div>
+                  <div class="cell-ind-info">
+                    <span class="cell-ind-name">Taxa de biossíntese (r<sub>bio</sub>)</span>
+                    <div class="cell-ind-valline">
+                      <strong id="ci-val-rbio">0,021 g·L⁻¹·h⁻¹</strong>
+                      <b class="ci-delta" id="ci-del-rbio">21 mg/L·h</b>
+                    </div>
+                  </div>
+                  <canvas id="ci-spark-rbio" class="ci-spark"></canvas>
+                </div>
+
+                <!-- 6. Taxa de liberação (k_di · (γ̇/Kγ) · Pi) -->
+                <div class="cell-ind-row" title="Taxa de liberação do pool intracelular Pi para o meio extracelular Pe mediada pelo cisalhamento.">
+                  <div class="cell-ind-icon ico-gold">✨</div>
+                  <div class="cell-ind-info">
+                    <span class="cell-ind-name">Taxa de liberação (r<sub>lib</sub>)</span>
+                    <div class="cell-ind-valline">
+                      <strong id="ci-val-rlib">0,009 g·L⁻¹·h⁻¹</strong>
+                      <b class="ci-delta delta-amber" id="ci-del-rlib">φ = 17%</b>
+                    </div>
+                  </div>
+                  <canvas id="ci-spark-rlib" class="ci-spark"></canvas>
+                </div>
+
+                <!-- 7. Cisalhamento médio (γ̇) -->
+                <div class="cell-ind-row" title="Taxa média de cisalhamento hidrodinâmico no biorreator STR (s⁻¹), acoplada à função de liberação φ(γ̇).">
+                  <div class="cell-ind-icon ico-cyan">🌀</div>
+                  <div class="cell-ind-info">
+                    <span class="cell-ind-name">Cisalhamento médio (γ̇)</span>
+                    <div class="cell-ind-valline">
+                      <strong id="ci-val-gamma">145,0 s⁻¹</strong>
+                      <b class="ci-delta" id="ci-del-gamma">Kγ 705</b>
+                    </div>
+                  </div>
+                  <canvas id="ci-spark-gamma" class="ci-spark"></canvas>
+                </div>
+
+                <!-- 8. Viscosidade aparente (μ_app) -->
+                <div class="cell-ind-row" title="Viscosidade aparente não-newtoniana do caldo filamentoso (mPa·s).">
+                  <div class="cell-ind-icon ico-amber">💧</div>
+                  <div class="cell-ind-info">
+                    <span class="cell-ind-name">Viscosidade aparente (μ<sub>app</sub>)</span>
+                    <div class="cell-ind-valline">
+                      <strong id="ci-val-visc">62,8 mPa·s</strong>
+                      <b class="ci-delta" id="ci-del-visc">Reologia</b>
+                    </div>
+                  </div>
+                  <canvas id="ci-spark-visc" class="ci-spark"></canvas>
+                </div>
+
+                <!-- 9. Produtividade específica (q_P / β_eff) -->
+                <div class="cell-ind-row" title="Produtividade específica instantânea de Ácido Clavulânico por unidade de biomassa micelial.">
+                  <div class="cell-ind-icon ico-emerald">📊</div>
+                  <div class="cell-ind-info">
+                    <span class="cell-ind-name">Produtividade espec. (q<sub>P</sub>)</span>
+                    <div class="cell-ind-valline">
+                      <strong id="ci-val-prod">18,4 mg·gX⁻¹·h⁻¹</strong>
+                      <b class="ci-delta delta-up" id="ci-del-prod">β ativo</b>
+                    </div>
+                  </div>
+                  <canvas id="ci-spark-prod" class="ci-spark"></canvas>
+                </div>
+              </div>
+            </aside>
+
+            <!-- CENTRO: LENTE MICROSCÓPICA CIRCULAR 3D THREE.JS (ELEMENTO PREDOMINANTE) -->
+            <div class="cell-microscope-stage">
+              <div class="cell-lens-frame" id="cell-canvas-wrap">
+                <canvas id="cell-canvas"></canvas>
+
+                <!-- Anel Graduado Circular e Vinheta Microscópica -->
+                <div class="cell-circular-ring-overlay" aria-hidden="true"></div>
+
+                <!-- SVG para linhas de chamada conectando rótulos às estruturas 3D da hifa -->
+                <svg id="cell-callout-svg" class="cell-callout-svg" aria-hidden="true"></svg>
+
+                <!-- 5 Botões Circulares de Ação Rápida no Arco Esquerdo da Lente (igual à imagem) -->
+                <div class="cell-arc-controls" aria-label="Controles da visualização microscópica 3D">
+                  <button type="button" class="cell-orb-btn active" data-cell-cam="reset" title="Resetar Zoom / Visão Geral da Hifa 3D">🔍</button>
+                  <button type="button" class="cell-orb-btn" data-cell-cam="layers" title="Alternar todas as camadas celulares">🥞</button>
+                  <button type="button" class="cell-orb-btn" data-cell-cam="focus-structure" title="Focar Morfologia e Parede Celular">⚛</button>
+                  <button type="button" class="cell-orb-btn" data-cell-cam="focus-dna" title="Focar Nucleoide e Cluster pSCL4">🧬</button>
+                  <button type="button" class="cell-orb-btn" data-cell-cam="focus-release" title="Focar Biossíntese Pi e Liberação Extracelular Pe">⚗</button>
+                </div>
+
+                <!-- Lente Circular Menor no Topo Direito: Esporos (Representação Morfológica Conceitual) -->
+                <div class="cell-spores-inset" title="Representação morfológica conceitual da diferenciação esporogênica de Streptomyces clavuligerus">
+                  <canvas id="cell-spores-canvas" width="110" height="110"></canvas>
+                  <span>Esporos <small>(conceitual)</small></span>
+                </div>
+
+                <!-- Rótulos Anatômicos e Metabólicos Interativos na Cena 3D -->
+                <div class="cell-3d-labels-layer">
+                  <button type="button" class="c3d-label" data-struct-focus="mycelium" style="left:25%;top:18%">
+                    <strong>Micélio</strong><small>(filamentos ramificados)</small>
+                  </button>
+                  <button type="button" class="c3d-label" data-struct-focus="hypha" style="left:66%;top:25%">
+                    <strong>Hifa vegetativa</strong>
+                  </button>
+                  <button type="button" class="c3d-label" data-struct-focus="wall" style="left:16%;top:51%">
+                    <strong>Parede celular</strong>
+                  </button>
+                  <button type="button" class="c3d-label" data-struct-focus="membrane" style="left:16%;top:58%">
+                    <strong>Membrana plasmática</strong>
+                  </button>
+                  <button type="button" class="c3d-label" data-struct-focus="cytoplasm" style="left:18%;top:65%">
+                    <strong>Citoplasma</strong>
+                  </button>
+                  <button type="button" class="c3d-label" data-struct-focus="ribosomes" style="left:18%;top:72%">
+                    <strong>Ribossomos</strong>
+                  </button>
+                  <button type="button" class="c3d-label" data-struct-focus="nucleoid" style="left:46%;top:88%">
+                    <strong>Nucleoide</strong><small>(DNA cromossomal)</small>
+                  </button>
+                  <button type="button" class="c3d-label c3d-label-cyan" data-struct-focus="cluster" style="left:63%;top:78%">
+                    <strong>Cluster de biossíntese</strong><small>(AC) – pSCL4</small>
+                  </button>
+                  <button type="button" class="c3d-label c3d-label-gold" data-struct-focus="release" style="left:78%;top:64%">
+                    <strong>Ácido clavulânico</strong><small>(liberação extracelular)</small>
+                  </button>
+                </div>
+
+                <!-- Banner de Inspeção Científica da Estrutura Selecionada -->
+                <div class="cell-struct-banner" id="cell-struct-banner">
+                  <strong id="csb-title">Hifa Vegetativa &amp; Cluster pSCL4 (Streptomyces clavuligerus)</strong>
+                  <span id="csb-desc">Arraste para orbitar em 3D · Roda para zoom · Clique em qualquer estrutura celular ou gene para inspecionar.</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- COLUNA DIREITA: 3 Painéis Científicos (Cluster Biossintético + Metabolismo e Biossíntese + Produção de Metabólitos) -->
+            <aside class="cell-right-col">
+              <!-- Painel Direito 1: Cluster Biossintético – Ácido Clavulânico (Seção 5 e Imagem) -->
+              <div class="panel-card cell-cluster-card">
+                <div class="panel-header">
+                  <div class="panel-title">Cluster Biossintético – Ácido Clavulânico</div>
+                  <span class="text-cyan" style="font-size:9.5px;font-family:var(--font-mono)" id="cluster-mult-badge">pSCL4 · 1,00×</span>
+                </div>
+
+                <!-- Mapa de Setas Gênicas (idêntico à referência visual) -->
+                <div class="cluster-arrows-track" id="cluster-arrows-track">
+                  <button type="button" class="gene-arrow ga-cyan" data-gene-select="ceaS2" title="ceaS2: Carboxietilarginina sintase"><span>ceaS2</span></button>
+                  <button type="button" class="gene-arrow ga-cyan" data-gene-select="bls2" title="bls2: β-lactama sintetase (conceitual)"><span>bls2</span></button>
+                  <button type="button" class="gene-arrow ga-lime" data-gene-select="pah2" title="pah2: Proclavaminato amidinohidrolase (conceitual)"><span>pah2</span></button>
+                  <button type="button" class="gene-arrow ga-lime" data-gene-select="cas2" title="cas2: Clavaminato sintase (O₂-dependente)"><span>cas2</span></button>
+                  <button type="button" class="gene-arrow ga-violet" data-gene-select="lat" title="lat: Via competidora Cefamicina C"><span>lat</span></button>
+                  <button type="button" class="gene-arrow ga-violet" data-gene-select="cvm" title="cvm: Via paralela Clavamas 5S"><span>cvm</span></button>
+                  <button type="button" class="gene-arrow ga-orange" data-gene-select="ccaR" title="ccaR: Regulador global do supercluster"><span>ccaR</span></button>
+                  <button type="button" class="gene-arrow ga-red active" data-gene-select="claR" title="claR: Regulador tardio específico de AC"><span>claR</span></button>
+                </div>
+
+                <div class="cluster-legend-grid">
+                  <span><i style="background:#06b6d4"></i>Síntese de precursores</span>
+                  <span><i style="background:#84cc16"></i>Montagem / oxidação (O₂)</span>
+                  <span><i style="background:#a855f7"></i>Vias competidoras (lat/cvm)</span>
+                  <span><i style="background:#f97316"></i>Regulação (ccaR / claR)</span>
+                </div>
+
+                <!-- Inspetor e Controle do Gene Selecionado (Seção 5) -->
+                <div class="gene-inspector-box" id="gene-inspector-box">
+                  <div class="gi-top">
+                    <strong id="gi-name">claR — Regulador Transcricional Tardio</strong>
+                    <span class="gene-badge badge-wt" id="gi-badge">1,0× WT</span>
+                  </div>
+                  <p id="gi-role">Ativa especificamente o operon tardio de conversão do ácido clavâmico em ácido clavulânico.</p>
+                  <div class="gi-ctrl-row" id="gi-ctrl-row">
+                    <span>Expressão no Modelo:</span>
+                    <div class="gene-quick-btns">
+                      <button type="button" class="mini-pill" id="gi-btn-ko">KO (0×)</button>
+                      <button type="button" class="mini-pill" id="gi-btn-wt">WT (1×)</button>
+                      <button type="button" class="mini-pill" id="gi-btn-oe">OE (2,5×)</button>
+                    </div>
+                    <input type="range" id="gi-slider" class="bio-slider" min="0" max="3" step="0.1" value="1.0" />
+                  </div>
+                </div>
+              </div>
+
+              <!-- Painel Direito 2: Metabolismo e Biossíntese (Seção 4 e 6 + Diagrama da Imagem) -->
+              <div class="panel-card cell-pathway-card">
+                <div class="panel-header">
+                  <div class="panel-title">Metabolismo e Biossíntese</div>
+                  <span class="text-amber" style="font-size:9px;font-family:var(--font-mono)">EDOs Pi / Pe</span>
+                </div>
+
+                <!-- Fluxograma Metabólico idêntico à imagem de referência -->
+                <div class="pathway-diagram">
+                  <div class="pw-inputs">
+                    <div class="pw-node pw-cyan" title="Glicerol livre e carbono complexo (G3P)">
+                      <strong>Carbono</strong>
+                      <small id="pw-val-c">(glicerol: 5,0 g/L)</small>
+                    </div>
+                    <div class="pw-node pw-cyan" title="Precursor nitrogenado C5 da via biossintética">
+                      <strong>L-arginina</strong>
+                      <small>(precursor C5 · conc.)</small>
+                    </div>
+                  </div>
+                  <div class="pw-arrow">→</div>
+                  <div class="pw-node pw-teal" title="Condensação G3P + L-Arginina -> CEA -> Proclavaminato -> Ácido Clavâmico (etapas intermediárias conceituais)">
+                    <strong>Precursores</strong>
+                    <small>(CEA / Clavaminato)</small>
+                  </div>
+                  <div class="pw-arrow">→</div>
+                  <div class="pw-node pw-gold" title="Taxa de biossíntese calculada pelo modelo: r_bio">
+                    <strong>Biossíntese</strong>
+                    <small id="pw-val-rbio">(Cluster AC)</small>
+                  </div>
+                  <div class="pw-arrow">→</div>
+                  <div class="pw-outputs">
+                    <div class="pw-node pw-emerald" title="dPi/dt = r_bio - k_di*(1 + γ̇/Kγ)*Pi - D*Pi">
+                      <strong>P<sub>i</sub></strong>
+                      <small id="pw-val-pi">(Intracelular)</small>
+                    </div>
+                    <div class="pw-arrow-down">↓ <span id="pw-val-phi">φ(γ̇)</span></div>
+                    <div class="pw-node pw-emerald-bright" title="dPe/dt = k_di*(γ̇/Kγ)*Pi - k_dP*Pe - D*Pe">
+                      <strong>P<sub>e</sub></strong>
+                      <small id="pw-val-pe">(Extracelular)</small>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="ode-compact-strip">
+                  <span><b>dPi/dt</b> = r<sub>bio</sub> − k<sub>di</sub>(1+γ̇/K<sub>γ</sub>)P<sub>i</sub> − D·P<sub>i</sub></span>
+                  <span><b>dPe/dt</b> = k<sub>di</sub>(γ̇/K<sub>γ</sub>)P<sub>i</sub> − k<sub>dP</sub>P<sub>e</sub> − D·P<sub>e</sub></span>
+                </div>
+              </div>
+
+              <!-- Painel Direito 3: Produção de Metabólitos (Seção 11 e Imagem) -->
+              <div class="panel-card cell-metabolites-card">
+                <div class="panel-header">
+                  <div class="panel-title">Produção de Metabólitos</div>
+                  <span style="font-size:9px;color:var(--text-muted)">Partição metabólica</span>
+                </div>
+
+                <div class="metab-bars-list">
+                  <div class="metab-row">
+                    <span class="metab-name">Ácido clavulânico (AC)</span>
+                    <div class="metab-track"><div class="metab-fill fill-cyan" id="mb-fill-ac" style="width:72%"></div></div>
+                    <span class="metab-tag" id="mb-val-ac">Principal</span>
+                  </div>
+                  <div class="metab-row">
+                    <span class="metab-name">Cefamicina C <small>(via lat)</small></span>
+                    <div class="metab-track"><div class="metab-fill fill-blue" id="mb-fill-ceph" style="width:24%"></div></div>
+                    <span class="metab-tag" id="mb-val-ceph">Secundário</span>
+                  </div>
+                  <div class="metab-row">
+                    <span class="metab-name">Clavamas 5S <small>(via cvm)</small></span>
+                    <div class="metab-track"><div class="metab-fill fill-amber" id="mb-fill-clav" style="width:14%"></div></div>
+                    <span class="metab-tag" id="mb-val-clav">Secundário</span>
+                  </div>
+                </div>
+                <p class="metab-disclaimer">
+                  AC calculado pelas EDOs calibradas; Cefamicina C e Clavamas 5S representam estimativas qualitativas de competição por precursores.
+                </p>
+              </div>
+            </aside>
+          </div>
+
+          <!-- GRADE INFERIOR (4 PAINÉIS IDÊNTICOS À IMAGEM DE REFERÊNCIA):
+               1. Camadas de Visualização | 2. Evolução Temporal (sincronizado) | 3. Parâmetros do Modelo | 4. Estado Celular -->
+          <div class="cell-bottom-4grid" id="cell-bottom-section">
+            <!-- Painel Inferior 1: Camadas de Visualização (Seção 10) -->
+            <div class="panel-card">
+              <div class="panel-header">
+                <div class="panel-title">Camadas de Visualização</div>
+                <span class="visual-only-badge">5 Camadas 3D</span>
+              </div>
+              <div class="cell-layers-list">
+                <label class="cell-layer-item">
+                  <span class="cl-ico">🕸</span>
+                  <span class="cl-txt">Morfologia <small>(hifas e micélio)</small></span>
+                  <input type="checkbox" class="rx-switch" data-cell-layer="morphology" checked />
+                </label>
+                <label class="cell-layer-item">
+                  <span class="cl-ico">🧱</span>
+                  <span class="cl-txt">Estrutura celular <small>(parede, membrana, citoplasma)</small></span>
+                  <input type="checkbox" class="rx-switch" data-cell-layer="structure" checked />
+                </label>
+                <label class="cell-layer-item">
+                  <span class="cl-ico">🧬</span>
+                  <span class="cl-txt">Material genético <small>(DNA e cluster pSCL4)</small></span>
+                  <input type="checkbox" class="rx-switch" data-cell-layer="genetics" checked />
+                </label>
+                <label class="cell-layer-item">
+                  <span class="cl-ico">🔄</span>
+                  <span class="cl-txt">Metabolismo <small>(rotas e precursores)</small></span>
+                  <input type="checkbox" class="rx-switch" data-cell-layer="metabolism" checked />
+                </label>
+                <label class="cell-layer-item">
+                  <span class="cl-ico">✨</span>
+                  <span class="cl-txt">Ácido clavulânico <small>(biossíntese e liberação)</small></span>
+                  <input type="checkbox" class="rx-switch" data-cell-layer="product" checked />
+                </label>
+              </div>
+            </div>
+
+            <!-- Painel Inferior 2: Evolução Temporal (sincronizado) (Seção 12) -->
+            <div class="panel-card">
+              <div class="panel-header">
+                <div class="panel-title">Evolução Temporal <small>(sincronizado)</small></div>
+                <div class="chart-legend">
+                  <span><i style="background:#10b981"></i>X (g·L⁻¹)</span>
+                  <span><i style="background:#f59e0b"></i>P<sub>i</sub> (g·L⁻¹)</span>
+                  <span><i style="background:#22d3ee"></i>P<sub>e</sub> (g·L⁻¹)</span>
+                </div>
+              </div>
+              <canvas id="cell-chart-sync" class="chart-box" style="height:155px"></canvas>
+            </div>
+
+            <!-- Painel Inferior 3: Parâmetros do Modelo (Seção 9) -->
+            <div class="panel-card" id="cell-params-card">
+              <div class="panel-header">
+                <div class="panel-title">Parâmetros do Modelo</div>
+                <span class="model-coupled-badge">⚡ Altera EDO</span>
+              </div>
+              <div class="cell-params-sliders">
+                <div class="cp-row">
+                  <label for="math-beta">β <small>(produtividade)</small></label>
+                  <input type="range" id="math-beta" class="bio-slider" min="10" max="45" step="0.4" value="21.6" />
+                  <strong id="math-beta-val">21,6 mg/g·h</strong>
+                </div>
+                <div class="cp-row">
+                  <label for="math-kdi-slider">k<sub>di</sub> <small>(liberação/degr.)</small></label>
+                  <input type="range" id="math-kdi-slider" class="bio-slider" min="0.03" max="3.00" step="0.05" value="1.00" />
+                  <strong id="math-kdi-val">1,00 h⁻¹</strong>
+                </div>
+                <div class="cp-row">
+                  <label for="math-kgamma">K<sub>γ</sub> <small>(cisalhamento)</small></label>
+                  <input type="range" id="math-kgamma" class="bio-slider" min="120" max="1100" step="10" value="705.1" />
+                  <strong id="math-kgamma-val">705 s⁻¹</strong>
+                </div>
+                <div class="cp-row">
+                  <label for="math-kdp">k<sub>dP</sub> <small>(degradação Pe)</small></label>
+                  <input type="range" id="math-kdp" class="bio-slider" min="0.005" max="0.070" step="0.001" value="0.038" />
+                  <strong id="math-kdp-val">0,038 h⁻¹</strong>
+                </div>
+                <div class="cp-row">
+                  <label for="math-mumax">μ<sub>max</sub> <small>(crescimento)</small></label>
+                  <input type="range" id="math-mumax" class="bio-slider" min="0.06" max="0.18" step="0.005" value="0.115" />
+                  <strong id="math-mumax-val">0,115 h⁻¹</strong>
+                </div>
+              </div>
+              <div class="cell-struct-toggles">
+                <label title="Inibição por taxa de crescimento g(μ)"><input type="checkbox" id="math-mu-inhib" /> g(μ)</label>
+                <label title="Regulação por fosfato fP"><input type="checkbox" id="math-fp-active" checked /> f<sub>P</sub> (PO₄)</label>
+                <label title="Saturação de precursor de glicerol θG = 1"><input type="checkbox" id="math-thetag-sat" /> θ<sub>G</sub> = 1</label>
+              </div>
+            </div>
+
+            <!-- Painel Inferior 4: Estado Celular & Gargalos (Imagem de Referência) -->
+            <div class="panel-card">
+              <div class="panel-header">
+                <div class="panel-title">Estado Celular</div>
+                <span class="text-emerald" style="font-size:9.5px;font-family:var(--font-mono)" id="cell-state-summary">Fisiologia Ativa</span>
+              </div>
+              <div class="cell-state-checklist" id="cell-state-checklist">
+                <div class="cs-check-row"><i class="cs-ok">✓</i><span id="cs-row-1">Produção de AC ativa</span></div>
+                <div class="cs-check-row"><i class="cs-ok">✓</i><span id="cs-row-2">Liberação extracelular normal</span></div>
+                <div class="cs-check-row"><i class="cs-ok">✓</i><span id="cs-row-3">Crescimento em fase produtiva</span></div>
+                <div class="cs-check-row"><i class="cs-ok">✓</i><span id="cs-row-4">Expressão do cluster (pSCL4) estável</span></div>
+              </div>
+              <div class="cell-top-bottleneck" id="cell-top-bottleneck"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <!-- Scripts clássicos (100% compatíveis com abertura direta via file:/// sem CORS) -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/0.160.0/three.min.js"></script>
+  <script src="engine/model.js"></script>
+  <script src="views/charts.js"></script>
+  <script src="views/plantView.js"></script>
+  <script src="views/plant3d.js"></script>
+  <script src="views/reactor3d.js"></script>
+  <script src="views/reactorView.js"></script>
+  <script src="views/cell3d.js"></script>
+  <script src="views/cellView.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
+
+
+
+
+
+
+
+
